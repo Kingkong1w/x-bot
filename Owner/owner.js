@@ -1,0 +1,1 @@
+module.exports = ["𓆩⚡ 𝙕𝘼𝙈𝘼𝙉 𝙓 ⚡𓆪👑"]; // <-- Replace with YOUR number

@@ -14,6 +14,7 @@ const { storeMessage, handleMessageRevocation } = require("./antidelete");
 const AntiLinkKick = require("./antilinkick.js");
 const { antibugHandler } = require("./antibug.js"); // ✅ import correct function
 
+// ✅ readline create only once
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
@@ -51,7 +52,7 @@ async function startBot() {
 
     if (connection === "open") {  
       console.log("✅ [BOT ONLINE] Connected to WhatsApp!");  
-      rl.close();  
+      // ❌ rl.close() hata diya – readline ko khula rehne do
     }  
 
     if (connection === "close") {  
@@ -156,7 +157,6 @@ async function startBot() {
       try {
         const isBug = await antibugHandler({ conn: sock, m: msg }); // ✅ FIX
         if (isBug) {
-          
           return;
         }
       } catch (err) {
@@ -226,8 +226,10 @@ async function startBot() {
 
   // ✅ Pairing code
   if (!state.creds?.registered) {
-    const phoneNumber = await question("📱 Enter your WhatsApp number (with country code): ");
-    await sock.requestPairingCode(phoneNumber.trim());
+    if (!global.phoneNumber) {
+      global.phoneNumber = await question("📱 Enter your WhatsApp number (with country code): ");
+    }
+    await sock.requestPairingCode(global.phoneNumber.trim());
 
     setTimeout(() => {  
       const code = sock.authState.creds?.pairingCode;  
@@ -243,3 +245,8 @@ async function startBot() {
 }
 
 startBot();
+
+// ✅ Cleanup on exit
+process.on("exit", () => {
+  rl.close();
+});

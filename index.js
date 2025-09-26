@@ -1,20 +1,25 @@
+/**
+ * 🔥 ZAMANX BOT - Pro Index.js
+ * 🚀 Advanced Features by Pro Dev
+ */
+
 const fs = require("fs");
 const readline = require("readline");
 const P = require("pino");
-const { 
-  default: makeWASocket, 
-  useMultiFileAuthState, 
-  fetchLatestBaileysVersion, 
-  DisconnectReason 
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  DisconnectReason
 } = require("@whiskeysockets/baileys");
 
 const { handleCommand } = require("./menu/case");
 const { loadSettings } = require("./settings");
 const { storeMessage, handleMessageRevocation } = require("./antidelete");
 const AntiLinkKick = require("./antilinkick.js");
-const { antibugHandler } = require("./antibug.js"); // ✅ import correct function
+const { antibugHandler } = require("./antibug.js");
 
-// ✅ readline create only once
+// ✅ readline setup
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
@@ -24,17 +29,18 @@ async function startBot() {
 
   const sock = makeWASocket({ version, auth: state, logger: P({ level: "fatal" }) });
 
-  const settings = typeof loadSettings === 'function' ? loadSettings() : {};
+  const settings = typeof loadSettings === "function" ? loadSettings() : {};
   let ownerRaw = settings.ownerNumber?.[0] || "92300xxxxxxx";
   const ownerJid = ownerRaw.includes("@s.whatsapp.net") ? ownerRaw : ownerRaw + "@s.whatsapp.net";
 
+  // 🌍 Globals
   global.sock = sock;
   global.settings = settings;
   global.signature = settings.signature || "> 𓆩⚡ 𝙕𝘼𝙈𝘼𝙉 𝙓 ⚡𓆪👑";
   global.owner = ownerJid;
   global.ownerNumber = ownerRaw;
 
-  // ✅ Flags
+  // 🔧 Flags
   global.antilink = {};
   global.antilinkick = {};
   global.antibug = false;
@@ -42,211 +48,155 @@ async function startBot() {
   global.autotyping = false;
   global.autoreact = false;
   global.autostatus = false;
+  global.aiChat = false; // ✅ AI toggle
 
   console.log("✅ BOT OWNER:", global.owner);
 
   sock.ev.on("creds.update", saveCreds);
 
+  // 🔥 Auto Bio Updater
+  setInterval(async () => {
+    try {
+      const uptime = Math.floor(process.uptime() / 60);
+      await sock.updateProfileStatus(`⚡ ZAMANX BOT | Uptime: ${uptime} mins`);
+    } catch {}
+  }, 30 * 60 * 1000);
+
+  // ✅ Connection Updates
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect } = update;
+    if (connection === "open") {
+      console.log("✅ [BOT ONLINE] Connected to WhatsApp!");
 
-    if (connection === "open") {  
-      console.log("✅ [BOT ONLINE] Connected to WhatsApp!");  
-      // ❌ rl.close() hata diya – readline ko khula rehne do
-    }  
+      // 🔥 First-time Welcome
+      try {
+        const welcomeText = `
+╭━━〔𓆩⚡ 𝙕𝘼𝙈𝘼𝙉 𝙓 ⚡𓆪〕━╮
+┃ ✅ Bot Successfully Linked!
+┃ 👑 Owner: ZAMAN X
+┃ 📢 Channel: https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
+┃ 💀 Status: PROTOCOL ACTIVE
+╰━━━━━━━━━━━━━━━━━╯
 
-    if (connection === "close") {  
-      const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);  
-      console.log("❌ Disconnected. Reconnecting:", shouldReconnect);  
-      if (shouldReconnect) startBot();  
+*『🚀 Welcome to ZAMANX BOT World!』*
+`;
+        await sock.sendMessage(sock.user.id, {
+          image: fs.existsSync("./media/welcome.jpg")
+            ? { url: "./media/welcome.jpg" }
+            : undefined,
+          caption: welcomeText
+        });
+      } catch {}
+    }
+    if (connection === "close") {
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log("❌ Disconnected. Reconnecting:", shouldReconnect);
+      if (shouldReconnect) startBot();
     }
   });
 
+  // ✅ Messages
   sock.ev.on("messages.upsert", async ({ messages }) => {
     const msg = messages[0];
+    if (!msg.message) return;
     const jid = msg.key.remoteJid;
-    const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+    const text =
+      msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+
+    // 🌟 Auto Reply
+    if (/^(hi|hello|salam)$/i.test(text)) {
+      await sock.sendMessage(jid, { text: `👋 Hey ${msg.pushName || "User"}, Welcome to ZAMANX BOT ⚡` });
+    }
+
+    // 🌟 AI Chat (toggle)
+    if (global.aiChat && !msg.key.fromMe && jid !== "status@broadcast") {
+      await sock.sendMessage(jid, { text: `🤖 [AI]: ${text} (AI reply yahan ayega)` });
+    }
 
     // ✅ AntiDelete
-    if (settings.ANTIDELETE === true) {  
-      try {  
-        if (msg.message) storeMessage(msg);  
-        if (msg.message?.protocolMessage?.type === 0) {  
-          await handleMessageRevocation(sock, msg);  
-          return;  
-        }  
-      } catch (err) {  
-        console.error("❌ AntiDelete Error:", err.message);  
-      }  
-    }  
-
-    // ✅ AutoTyping
-    if (global.autotyping && jid !== "status@broadcast") {  
-      try {  
-        await sock.sendPresenceUpdate('composing', jid);  
-        await new Promise(res => setTimeout(res, 2000));  
-      } catch (err) {  
-        console.error("❌ AutoTyping Error:", err.message);  
-      }  
-    }  
-
-    // ✅ AutoReact
-    if (global.autoreact && jid !== "status@broadcast") {
+    if (settings.ANTIDELETE === true) {
       try {
-        const hearts = [
-          "❤️","☣️","🅣","🧡","💛","💚","💙","💜",
-          "🖤","🤍","🤎","💕","💞","💓",
-          "💗","💖","💘","💝","🇵🇰","♥️"
-        ];
-        const randomHeart = hearts[Math.floor(Math.random() * hearts.length)];
-        await sock.sendMessage(jid, { react: { text: randomHeart, key: msg.key } });
-      } catch (err) {
-        console.error("❌ AutoReact Error:", err.message);
-      }
-    }  
-
-    // ✅ AutoStatus View
-    if (global.autostatus && jid === "status@broadcast") {  
-      try {  
-        await sock.readMessages([{  
-          remoteJid: jid,  
-          id: msg.key.id,  
-          participant: msg.key.participant || msg.participant  
-        }]);  
-        console.log(`👁️ Status Seen: ${msg.key.participant || "Unknown"}`);  
-      } catch (err) {  
-        console.error("❌ AutoStatus View Error:", err.message);  
-      }  
-      return;  
-    }  
-
-    // ✅ Antilink
-    if (
-      jid.endsWith("@g.us") &&
-      global.antilink[jid] === true &&
-      /(chat\.whatsapp\.com|t\.me|discord\.gg|wa\.me|bit\.ly|youtu\.be|https?:\/\/)/i.test(text) &&
-      !msg.key.fromMe
-    ) {
-      try {
-        await sock.sendMessage(jid, {  
-          delete: { remoteJid: jid, fromMe: false, id: msg.key.id, participant: msg.key.participant || msg.participant }  
-        });  
-        
-      } catch (err) {
-        console.error("❌ Antilink Delete Error:", err.message);
-      }
-    }
-
-    // ✅ AntilinkKick
-    if (
-      jid.endsWith("@g.us") &&
-      global.antilinkick[jid] === true &&
-      /(chat\.whatsapp\.com|t\.me|discord\.gg|wa\.me|bit\.ly|youtu\.be|https?:\/\/)/i.test(text) &&
-      !msg.key.fromMe
-    ) {
-      try {
-        await AntiLinkKick.checkAntilinkKick({ conn: sock, m: msg });
-        
-      } catch (err) {
-        console.error("❌ AntilinkKick Error:", err.message || err);
-      }
-    }
-
-    // ✅ AntiBug
-    if (global.antibug === true && !msg.key.fromMe) {
-      try {
-        const isBug = await antibugHandler({ conn: sock, m: msg }); // ✅ FIX
-        if (isBug) {
+        if (msg.message) storeMessage(msg);
+        if (msg.message?.protocolMessage?.type === 0) {
+          await handleMessageRevocation(sock, msg);
           return;
         }
       } catch (err) {
-        console.error("❌ AntiBug Error:", err.message || err);
+        console.error("❌ AntiDelete Error:", err.message);
       }
+    }
+
+    // ✅ AutoTyping
+    if (global.autotyping && jid !== "status@broadcast") {
+      await sock.sendPresenceUpdate("composing", jid);
+    }
+
+    // ✅ AutoReact
+    if (global.autoreact && jid !== "status@broadcast") {
+      const reacts = ["🔥", "⚡", "❤️", "💀", "👑"];
+      const random = reacts[Math.floor(Math.random() * reacts.length)];
+      await sock.sendMessage(jid, { react: { text: random, key: msg.key } });
+    }
+
+    // ✅ Flood Protection (basic)
+    if (text.length > 500) {
+      await sock.sendMessage(jid, { text: "⚠️ Spam detected. Message removed." });
+      return;
     }
 
     // ✅ Command handler
-    try {  
-      await handleCommand(sock, msg, {});  
-    } catch (err) {  
-      console.error("❌ Command error:", err.message || err);  
+    try {
+      await handleCommand(sock, msg, {});
+    } catch (err) {
+      console.error("❌ Command error:", err.message);
     }
   });
 
-  // ✅ AutoGreet
+  // ✅ Group Updates
   sock.ev.on("group-participants.update", async (update) => {
     const { id, participants, action } = update;
     if (!global.autogreet?.[id]) return;
-
-    try {
-      const metadata = await sock.groupMetadata(id);
-      const memberCount = metadata.participants.length;
-      const groupName = metadata.subject || "Unnamed Group";
-      const groupDesc = metadata.desc?.toString() || "No description set.";
-
-      for (const user of participants) {
-        const tag = `@${user.split("@")[0]}`;
-        let message = "";
-
-        if (action === "add") {
-          message = `
-┏━━━🔥༺ 𓆩💀𓆪 ༻🔥━━━┓
-   💠 *WELCOME TO HELL* 💠
-┗━━━🔥༺ 𓆩💀𓆪 ༻🔥━━━┛
-
-👹 *Hey ${tag}, Welcome to*  
-『 ${groupName} 』
-
-⚡ *Current Members:* ${memberCount}  
-📜 *Group Description:*  
-『 ${groupDesc} 』
-
-💀 *Attitude ON, Rules OFF*  
-👾 *𓆩⚡ 𝙕𝘼𝙈𝘼𝙉 𝙓 ⚡𓆪👑 welcomes you with POWER* ⚡
-          `;
-        } else if (action === "remove") {
-          message = `
-┏━━━💔༺ 𓆩☠️𓆪 ༻💔━━━┓
-   ❌ *GOODBYE WARRIOR* ❌
-┗━━━💔༺ 𓆩☠️𓆪 ༻💔━━━┛
-
-💔 ${tag} *has left the battlefield...*  
-⚡ *Now only ${memberCount - 1} members remain in ${groupName}*  
-☠️ *Hell doesn’t forget easily...*  
-          `;
-        }
-
-        if (message) {
-          await sock.sendMessage(id, { text: message, mentions: [user] });
-        }
+    for (const user of participants) {
+      const tag = `@${user.split("@")[0]}`;
+      if (action === "add") {
+        await sock.sendMessage(id, {
+          text: `⚡ Welcome ${tag} to the group!`,
+          mentions: [user]
+        });
+      } else if (action === "remove") {
+        await sock.sendMessage(id, {
+          text: `👋 Goodbye ${tag}`,
+          mentions: [user]
+        });
       }
-    } catch (err) {
-      console.error("❌ AutoGreet Error:", err.message);
     }
   });
 
-  // ✅ Pairing code
+  // ✅ Pairing Code
   if (!state.creds?.registered) {
     if (!global.phoneNumber) {
       global.phoneNumber = await question("📱 Enter your WhatsApp number (with country code): ");
     }
     await sock.requestPairingCode(global.phoneNumber.trim());
-
-    setTimeout(() => {  
-      const code = sock.authState.creds?.pairingCode;  
-      if (code) {  
-        console.log("\n🔗 Pair this device using this code in WhatsApp:\n");  
-        console.log("   " + code + "\n");  
-        console.log("Go to WhatsApp → Linked Devices → Link with code.");  
-      } else {  
-        console.log("❌ Pairing code not found.");  
-      }  
+    setTimeout(() => {
+      const code = sock.authState.creds?.pairingCode;
+      if (code) {
+        console.log("\n🔗 Pair this device using this code in WhatsApp:\n");
+        console.log("   " + code + "\n");
+        console.log("Go to WhatsApp → Linked Devices → Link with code.");
+      }
     }, 1000);
   }
 }
 
 startBot();
 
-// ✅ Cleanup on exit
-process.on("exit", () => {
-  rl.close();
+// ✅ Error logger
+process.on("uncaughtException", (err) => {
+  fs.appendFileSync("error.log", `[${new Date().toISOString()}] ${err.stack}\n`);
+  console.error("❌ Uncaught Error:", err.message);
 });
+
+// ✅ Cleanup
+process.on("exit", () => rl.close());
